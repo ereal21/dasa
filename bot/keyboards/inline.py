@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from bot.database.models import Permission
 
 from bot.localization import t
 from bot.database.methods import get_category_parent
@@ -126,17 +127,23 @@ def rules() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
-def console() -> InlineKeyboardMarkup:
+def console(role: int) -> InlineKeyboardMarkup:
+    assistant_role = Permission.USE | Permission.ASSIGN_PHOTOS
+    if role == assistant_role:
+        inline_keyboard = [
+            [InlineKeyboardButton('🖼 Assign photos', callback_data='assign_photos')],
+            [InlineKeyboardButton('🔙 Back to menu', callback_data='back_to_menu')]
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
     inline_keyboard = [
-        [InlineKeyboardButton('🏪 Parduotuvės valdymas', callback_data='shop_management')
-         ],
-        [InlineKeyboardButton('👥 Vartotojų valdymas', callback_data='user_management')
-         ],
-        [InlineKeyboardButton('📢 Pranešimų siuntimas', callback_data='send_message')
-         ],
-        [InlineKeyboardButton('🔙 Back to menu', callback_data='back_to_menu')
-         ]
+        [InlineKeyboardButton('🏪 Parduotuvės valdymas', callback_data='shop_management')],
+        [InlineKeyboardButton('👥 Vartotojų valdymas', callback_data='user_management')],
+        [InlineKeyboardButton('📢 Pranešimų siuntimas', callback_data='send_message')],
     ]
+    if role & Permission.OWN:
+        inline_keyboard.insert(0, [InlineKeyboardButton('🛠 Assign assistants', callback_data='assistant_management')])
+    inline_keyboard.append([InlineKeyboardButton('🔙 Back to menu', callback_data='back_to_menu')])
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 def confirm_purchase_menu(item_name: str, lang: str) -> InlineKeyboardMarkup:

@@ -12,6 +12,7 @@ class Permission:
     SHOP_MANAGE = 16
     ADMINS_MANAGE = 32
     OWN = 64
+    ASSIGN_PHOTOS = 128
 
 
 class Role(Database.BASE):
@@ -34,11 +35,13 @@ class Role(Database.BASE):
         roles = {
             'USER': [Permission.USE],
             'ADMIN': [Permission.USE, Permission.BROADCAST,
-                      Permission.SETTINGS_MANAGE, Permission.USERS_MANAGE, Permission.SHOP_MANAGE, ],
+                      Permission.SETTINGS_MANAGE, Permission.USERS_MANAGE,
+                      Permission.SHOP_MANAGE, Permission.ASSIGN_PHOTOS],
             'OWNER': [Permission.USE, Permission.BROADCAST,
-                      Permission.SETTINGS_MANAGE, Permission.USERS_MANAGE, Permission.SHOP_MANAGE,
-                      Permission.ADMINS_MANAGE,
-                      Permission.OWN],
+                      Permission.SETTINGS_MANAGE, Permission.USERS_MANAGE,
+                      Permission.SHOP_MANAGE, Permission.ADMINS_MANAGE,
+                      Permission.OWN, Permission.ASSIGN_PHOTOS],
+            'ASSISTANT': [Permission.USE, Permission.ASSIGN_PHOTOS],
         }
         default_role = 'USER'
         for r in roles:

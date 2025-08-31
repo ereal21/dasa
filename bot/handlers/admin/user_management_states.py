@@ -18,7 +18,7 @@ async def user_callback_handler(call: CallbackQuery):
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     TgConfig.STATE[user_id] = 'user_username_for_check'
     role = check_role(user_id)
-    if role >= Permission.USERS_MANAGE:
+    if role & Permission.USERS_MANAGE:
         await bot.edit_message_text('👤 Enter the user username to view or edit their data',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -92,7 +92,7 @@ async def user_items_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     user_data = call.data[11:]
     role = check_role(user_id)
-    if role >= Permission.ADMINS_MANAGE:
+    if role & Permission.ADMINS_MANAGE:
         TgConfig.STATE[f'{user_id}_back'] = f'user-items_{user_data}'
         bought_goods = select_bought_items(user_data)
         goods = bought_items_list(user_id)
@@ -115,7 +115,7 @@ async def process_admin_for_purpose(call: CallbackQuery):
     user_data = call.data[10:]
     user_info = await bot.get_chat(user_data)
     role = check_role(user_id)
-    if role >= Permission.ADMINS_MANAGE:
+    if role & Permission.ADMINS_MANAGE:
         set_role(user_data, 2)
         await bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -144,7 +144,7 @@ async def process_admin_for_remove(call: CallbackQuery):
     user_data = call.data[13:]
     user_info = await bot.get_chat(user_data)
     role = check_role(user_id)
-    if role >= Permission.ADMINS_MANAGE:
+    if role & Permission.ADMINS_MANAGE:
         set_role(user_data, 1)
         await bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -174,7 +174,7 @@ async def replenish_user_balance_callback_handler(call: CallbackQuery):
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     TgConfig.STATE[user_id] = 'process_replenish_user_balance'
     role = check_role(user_id)
-    if role >= Permission.USERS_MANAGE:
+    if role & Permission.USERS_MANAGE:
         await bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
