@@ -16,7 +16,7 @@ async def send_message_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = 'waiting_for_message'
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     role = check_role(user_id)
-    if role >= Permission.BROADCAST:
+    if role & Permission.BROADCAST:
         await bot.edit_message_text(chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
                                     text='Send the message for broadcast:',

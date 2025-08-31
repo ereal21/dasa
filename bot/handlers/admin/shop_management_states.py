@@ -25,6 +25,7 @@ from bot.database.methods import (
     get_all_items,
     get_all_subcategories,
     get_category_parent,
+    get_item_info,
     get_user_count,
     select_admins,
     select_all_operations,
@@ -56,14 +57,14 @@ from bot.keyboards import (shop_management, goods_management, categories_managem
                            question_buttons, promo_codes_management, promo_expiry_keyboard, promo_codes_list,
                            promo_manage_actions)
 from bot.logger_mesh import logger
-from bot.misc import TgConfig
+from bot.misc import TgConfig, EnvKeys
 
 
 async def shop_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('⛩️ Shop management menu',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -77,7 +78,7 @@ async def logs_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
     file_path = 'bot.log'
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             with open(file_path, 'rb') as document:
                 await bot.send_document(chat_id=call.message.chat.id,
@@ -93,7 +94,7 @@ async def goods_management_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🛒 Prekių valdymo meniu',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -106,7 +107,7 @@ async def promo_management_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🏷 Promo codes menu',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -375,7 +376,7 @@ async def promo_manage_delete_handler(call: CallbackQuery):
 async def assign_photos_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     role = check_role(user_id)
-    if role < Permission.SHOP_MANAGE:
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
         await call.answer('Insufficient rights')
         return
     TgConfig.STATE[user_id] = None
@@ -392,6 +393,10 @@ async def assign_photos_callback_handler(call: CallbackQuery):
 
 async def assign_photo_category_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
+    role = check_role(user_id)
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
+        await call.answer('Insufficient rights')
+        return
     category = call.data[len('assign_photo_cat_'):]
     subcats = get_all_subcategories(category)
     markup = InlineKeyboardMarkup()
@@ -409,6 +414,10 @@ async def assign_photo_category_handler(call: CallbackQuery):
 
 async def assign_photo_subcategory_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
+    role = check_role(user_id)
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
+        await call.answer('Insufficient rights')
+        return
     sub = call.data[len('assign_photo_sub_'):]
     items = get_all_item_names(sub)
     markup = InlineKeyboardMarkup()
@@ -423,6 +432,10 @@ async def assign_photo_subcategory_handler(call: CallbackQuery):
 
 async def assign_photo_item_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
+    role = check_role(user_id)
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
+        await call.answer('Insufficient rights')
+        return
     item = call.data[len('assign_photo_item_'):]
     TgConfig.STATE[user_id] = 'assign_photo_wait_media'
     TgConfig.STATE[f'{user_id}_item'] = item
@@ -435,6 +448,9 @@ async def assign_photo_item_handler(call: CallbackQuery):
 
 async def assign_photo_receive_media(message: Message):
     bot, user_id = await get_bot_user_ids(message)
+    role = check_role(user_id)
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
+        return
     item = TgConfig.STATE.get(f'{user_id}_item')
     message_id = TgConfig.STATE.get(f'{user_id}_message_id')
     if not item:
@@ -465,6 +481,9 @@ async def assign_photo_receive_media(message: Message):
 
 async def assign_photo_receive_desc(message: Message):
     bot, user_id = await get_bot_user_ids(message)
+    role = check_role(user_id)
+    if not (role & Permission.SHOP_MANAGE or role & Permission.ASSIGN_PHOTOS):
+        return
     item = TgConfig.STATE.get(f'{user_id}_item')
     stock_path = TgConfig.STATE.get(f'{user_id}_stock_path')
     message_id = TgConfig.STATE.get(f'{user_id}_message_id')
@@ -485,12 +504,60 @@ async def assign_photo_receive_desc(message: Message):
                                 message_id=message_id,
                                 reply_markup=goods_management())
 
+    owner_id = int(EnvKeys.OWNER_ID) if EnvKeys.OWNER_ID else None
+    if owner_id:
+        username = f'@{message.from_user.username}' if message.from_user.username else message.from_user.full_name
+        info = get_item_info(item)
+        category = info['category_name']
+        parent = get_category_parent(category)
+        if parent:
+            category_name = parent
+            subcategory = category
+        else:
+            category_name = category
+            subcategory = '-'
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        info_id = f'{user_id}_{int(now.timestamp())}'
+        TgConfig.STATE[f'photo_info_{info_id}'] = {
+            'username': username,
+            'time': now.strftime("%Y-%m-%d %H:%M:%S"),
+            'product': display_name(item),
+            'category': category_name,
+            'subcategory': subcategory,
+            'description': message.text,
+            'file': stock_path,
+        }
+        markup = InlineKeyboardMarkup().add(InlineKeyboardButton('Yes', callback_data=f'photo_info_{info_id}'))
+        await bot.send_message(owner_id,
+                               f'{username}, uploaded a photo to a ({display_name(item)}) in ({category_name}), ({subcategory}).',
+                               reply_markup=markup)
+
+
+async def photo_info_callback_handler(call: CallbackQuery):
+    bot, user_id = await get_bot_user_ids(call)
+    data_id = call.data[len('photo_info_'):]
+    info = TgConfig.STATE.pop(f'photo_info_{data_id}', None)
+    if not info:
+        await call.answer('No data')
+        return
+    text = (
+        f"{info['username']}\n"
+        f"{info['time']}\n"
+        f"Product: {info['product']}\n"
+        f"Category: {info['category']} | {info['subcategory']}\n"
+        f"Description: {info['description']}\n"
+        f"File: {info['file']}"
+    )
+    await bot.edit_message_text(text,
+                                chat_id=call.message.chat.id,
+                                message_id=call.message.message_id)
+
 
 async def categories_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🧾 Kategorijų valdymo meniu',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -504,7 +571,7 @@ async def add_category_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = 'add_category'
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('Enter category name',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -517,7 +584,7 @@ async def add_subcategory_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         categories = get_all_category_names()
         markup = InlineKeyboardMarkup()
         for cat in categories:
@@ -554,7 +621,7 @@ async def statistics_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         await bot.edit_message_text('Shop statistics:\n'
                                     '➖➖➖➖➖➖➖➖➖➖➖➖➖\n'
@@ -634,7 +701,7 @@ async def delete_category_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role < Permission.SHOP_MANAGE:
+    if not (role & Permission.SHOP_MANAGE):
         await call.answer('Insufficient rights')
         return
     categories = get_all_category_names()
@@ -682,7 +749,7 @@ async def update_category_callback_handler(call: CallbackQuery):
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     TgConfig.STATE[user_id] = 'check_category'
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('Enter category name to update:',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -732,7 +799,7 @@ async def goods_settings_menu_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🛒 Pasirinkite veiksmą šiai prekei',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -746,7 +813,7 @@ async def add_item_callback_handler(call: CallbackQuery):
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     TgConfig.STATE[user_id] = 'create_item_name'
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🏷️ Įveskite prekės pavadinimą',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -896,7 +963,7 @@ async def update_item_amount_callback_handler(call: CallbackQuery):
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     TgConfig.STATE[user_id] = 'update_amount_of_item'
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🏷️ Įveskite prekės pavadinimą',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -956,11 +1023,11 @@ async def updating_item_amount(message: Message):
     group_id = TgConfig.GROUP_ID if TgConfig.GROUP_ID != -988765433 else None
     if group_id:
         try:
-            await bot.send_message(chat_id=group_id,
-                                   text=f'🎁 Upload\n'
-                                        f'🏷️ Item: <b>{item_name}</b>'
-                                        f'\n📦 Quantity: <b>{len(values_list)}</b>',
-                                   parse_mode='HTML')
+            await bot.send_message(
+                chat_id=group_id,
+                text=f'🎁 Upload\n🏷️ Item: <b>{item_name}</b>',
+                parse_mode='HTML'
+            )
         except ChatNotFound:
             pass
     await bot.edit_message_text(chat_id=message.chat.id,
@@ -977,7 +1044,7 @@ async def update_item_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = 'check_item_name'
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text('🏷️ Įveskite prekės pavadinimą',
                                     chat_id=call.message.chat.id,
                                     message_id=call.message.message_id,
@@ -1142,7 +1209,7 @@ async def delete_item_callback_handler(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     TgConfig.STATE[user_id] = None
     role = check_role(user_id)
-    if role < Permission.SHOP_MANAGE:
+    if not (role & Permission.SHOP_MANAGE):
         await call.answer('Insufficient rights')
         return
     categories = get_all_category_names()
@@ -1192,7 +1259,7 @@ async def show_bought_item_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = 'show_item'
     TgConfig.STATE[f'{user_id}_message_id'] = call.message.message_id
     role = check_role(user_id)
-    if role >= Permission.SHOP_MANAGE:
+    if role & Permission.SHOP_MANAGE:
         await bot.edit_message_text(
             '🔍 Enter the unique ID of the purchased item',
             chat_id=call.message.chat.id,
@@ -1259,6 +1326,8 @@ def register_shop_management(dp: Dispatcher) -> None:
                                        lambda c: c.data.startswith('assign_photo_sub_'))
     dp.register_callback_query_handler(assign_photo_item_handler,
                                        lambda c: c.data.startswith('assign_photo_item_'))
+    dp.register_callback_query_handler(photo_info_callback_handler,
+                                       lambda c: c.data.startswith('photo_info_'))
     dp.register_callback_query_handler(shop_callback_handler,
                                        lambda c: c.data == 'shop_management')
     dp.register_callback_query_handler(logs_callback_handler,

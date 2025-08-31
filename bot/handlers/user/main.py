@@ -63,8 +63,7 @@ def build_subcategory_description(parent: str, lang: str) -> str:
         goods = get_all_items(sub)
         for item in goods:
             info = get_item_info(item)
-            amount = select_item_values_amount(item) if not check_value(item) else '∞'
-            lines.append(f"    • {display_name(item)} ({info['price']:.2f}€) - {amount}")
+            lines.append(f"    • {display_name(item)} ({info['price']:.2f}€)")
         lines.append("")
     lines.append(t(lang, 'choose_subcategory'))
     return "\n".join(lines)
@@ -544,16 +543,12 @@ async def item_info_callback_handler(call: CallbackQuery):
     TgConfig.STATE[user_id] = None
     item_info_list = get_item_info(item_name)
     category = item_info_list['category_name']
-    quantity = 'Quantity - unlimited'
-    if not check_value(item_name):
-        quantity = f'Quantity - {select_item_values_amount(item_name)}pcs.'
     lang = get_user_language(user_id) or 'en'
     markup = item_info(item_name, category, lang)
     await bot.edit_message_text(
         f'🏪 Item {display_name(item_name)}\n'
         f'Description: {item_info_list["description"]}\n'
-        f'Price - {item_info_list["price"]}€\n'
-        f'{quantity}',
+        f'Price - {item_info_list["price"]}€',
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=markup)
